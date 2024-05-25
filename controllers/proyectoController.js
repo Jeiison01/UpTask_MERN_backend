@@ -1,26 +1,42 @@
 import Proyecto from "../models/Proyecto.js"
 import Usuario from "../models/Usuario.js"
+import winston from 'winston'
 
 const obtenerProyectos = async (req, res) => {
-    const proyectos = await Proyecto.find({
-        '$or':[
-            {colaboradores: {$in: req.usuario}},
-            {creador: {$in: req.usuario}}
-        ]
-    }).select('-tareas')
-    res.json(proyectos)
-}
-const nuevoProyecto = async (req, res) => {
-    const proyecto = new Proyecto(req.body)
-    proyecto.creador = req.usuario._id
+  const userId = req.usuario._id; // Extract user ID
 
-    try {
-        const proyectoAlmacenado = await proyecto.save()
-        res.json(proyectoAlmacenado)
-    } catch (error) {
-        console.log(error)
-    }
-}
+  try {
+    const proyectos = await Proyecto.find({
+      '$or': [
+        { colaboradores: { $in: userId } },
+        { creador: { $in: userId } },
+      ],
+    }).select('-tareas');
+    res.json(proyectos);
+
+    winston.info(`Usuario ${userId} obtuvo lista de proyectos.`); // Log project retrieval
+  } catch (error) {
+    winston.error(`Error al obtener proyectos para usuario ${userId}: ${error.message}`);
+    console.error(error); // Still log to console for debugging
+    res.status(500).json({ msg: 'Error al obtener proyectos' });
+  }
+};
+const nuevoProyecto = async (req, res) => {
+  const userId = req.usuario._id; // Extract user ID
+  const proyecto = new Proyecto(req.body);
+  proyecto.creador = userId;
+
+  try {
+    const proyectoAlmacenado = await proyecto.save();
+    res.json(proyectoAlmacenado);
+
+    winston.info(`Usuario ${userId} creó un nuevo proyecto: ${proyectoAlmacenado._id}`); // Log project creation
+  } catch (error) {
+    winston.error(`Error al crear proyecto para usuario ${userId}: ${error.message}`);
+    console.error(error);
+    res.status(500).json({ msg: 'Error al crear proyecto' });
+  }
+};
 
 const obtenerProyecto = async (req, res) => {
     const {id} = req.params
@@ -92,16 +108,20 @@ const eliminarProyecto = async (req, res) => {
 }
 
 const buscarColaborador = async (req, res) => {
-    const {email} = req.body
-    const usuario = await Usuario.findOne({email}).select('-confirmado -createdAt -password -token -updatedAt -__v')
+  const { email } = req.body;
 
-    if(!usuario){
-        const error = new Error('Usuario no encontrado')
-        return res.status(404).json({msg:error.message})
+  try {
+    const usuario = await Usuario.findOne({ email }).select('-confirmado -createdAt -password -token -updatedAt -__v');
+    if (!usuario) {
+      return res.status(404).json({ msg: 'Usuario no encontrado' });
     }
-
-    res.json(usuario)
-}
+    res.json(usuario);
+  } catch (error) {
+    winston.error(`Error al buscar colaborador con email ${email}: ${error.message}`);
+    console.error(error);
+    res.status(500).json({ msg: 'Error al buscar colaborador' });
+  }
+};
 
 const agregarColaborador = async (req, res) => {
     const proyecto = await Proyecto.findById(req.params.id);
